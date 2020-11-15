@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-#
-# Purpose :
-# This project goals to read TIC frames from serial port and publish them to warp10 websocket
-#   - automatic websocket reconnection
-#   - automatic serial device reconnection (usb key accidentally removed)
-#   - catch APP
 # 
 # Credits :
 # https://github.com/pyserial/pyserial/blob/master/examples/tcp_serial_redirect.py
@@ -15,6 +9,7 @@
 # Python dependencies :
 # sudo pip install pyserial
 # sudo pip install ws4py
+#
 
 #imports
 import sys
@@ -28,7 +23,8 @@ import time, socket
 #global_vars
 ws_connected = False  # State of ws connection
 ws_connecting = False  # State of ws connection
-ws_waitingforresponse = True # State of ws connection
+ws_waitingforresponse = True # State of ws response
+warp10_write_token = "" # Warp10 Token
 
 #classes
 class Warp10Client(WebSocketClient):
@@ -57,14 +53,17 @@ class Warp10Client(WebSocketClient):
         
     def opened(self):
         logging.info('Connected to warp10')
-        logging.info('Sending Token')
-        globals()["ws_waitingforresponse"] = True
-        self.send("TOKEN AP_8QdbvhyjFJuuOoohNyHJClJd7ODr.vP5GMt.Y6irthsyFdeaZt_vx2CeCrQfpF465ADT1RKD5e488pteN2MhfVomQbEHAPX8Ra3foeYo")
-        while not globals()["ws_waitingforresponse"]:
-            time.sleep(0.1)
+        # Onerror directive
         logging.info('Sending OnError directive')
         globals()["ws_waitingforresponse"] = True
         self.send("ONERROR MESSAGE")
+        while not globals()["ws_waitingforresponse"]:
+            time.sleep(0.1)
+        # Send Token
+        logging.info('Sending Token')
+        globals()["ws_waitingforresponse"] = True
+        token_command = "TOKEN " + globals()["warp10_write_token"]
+        self.send(token_command)
         while not globals()["ws_waitingforresponse"]:
             time.sleep(0.1)
         # Set flags connection
@@ -102,7 +101,6 @@ def push_to_warp10(self, name, value):
         globals()["ws_connected"] = False
         logging.error('Unable to send data to warp10. Websocket will be reconnected')
 
-
 def main():
 
 #conf_parser
@@ -111,7 +109,7 @@ def main():
     formatter_class=argparse.RawDescriptionHelpFormatter,
     epilog="""\
  TIC args example :
- -d /dev/ttyUSB0 -r 1200 --bytesize 7 --parity=E --stopbits=1 --loglevel=INFO
+ -d /dev/ttyUSB0 -r 1200 --bytesize 7 --parity=E --stopbits=1 --loglevel=INFO --warp10token my_token
  """)
 
     parser.add_argument(
@@ -199,6 +197,10 @@ def main():
     help='Warp10 WebSocket host',
     default="localhost")
 
+    exclusive_group.add_argument(
+    '-T', '--warp10token',
+    help='Warp10 Write Token')
+
     args = parser.parse_args()
 
 #conf_logger
@@ -226,6 +228,7 @@ def main():
 #conf_warp10
     # Configure Warp10
     warp10_url = "ws://" + args.warp10host + ":" + str(args.warp10port) + "/api/v0/streamupdate"
+    globals()["warp10_write_token"] = args.warp10token
 
 #main
     logging.info('Serial to Warp10 Started')
